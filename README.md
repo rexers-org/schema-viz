@@ -6,6 +6,13 @@
 
 ---
 
+## Release Note
+
+- `0.2.1` — documentation update (README and publishing-related docs alignment).
+- `0.2.0` — added live database introspection for PostgreSQL/MySQL, parser filter support (`--parser`), and browser auto-open toggle (`--autoopen` / `--auto-open`).
+
+---
+
 ## Features
 
 - **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
@@ -34,13 +41,14 @@ schema-viz --url '<connection-string>' [options]
 | Option | Default | Description |
 |---|---|---|
 | `--url` | — | `postgresql://` / `postgres://` / `mysql://` connection string (instead of `<path>`) |
+| `--parser=<id>` | auto-detect | Restrict parser for file input: `prisma` / `laravel` / `json` |
 | `--port=<n>` | `7337` | Port to run the local server on |
-| `--no-open` | — | Don't auto-open the browser |
+| `--autoopen` (`--auto-open`) | off | Auto-open the browser after server starts |
 
 ```bash
 schema-viz ./prisma/schema
 schema-viz ./prisma/schema.prisma --port=8080
-schema-viz ./schema.json --no-open
+schema-viz ./schema.json --autoopen
 schema-viz --url postgresql://user:pass@localhost:5432/mydb
 schema-viz "mysql://user:pass@localhost:3306/mydb"
 ```
@@ -85,8 +93,8 @@ alias schema-viz="npx tsx /path/to/schema-viz/src/cli.ts"
 ### Development
 
 ```bash
-# Terminal 1 — API server (no browser)
-npx tsx src/cli.ts ./prisma/schema --no-open
+# Terminal 1 — API server (default: no browser auto-open)
+npx tsx src/cli.ts ./prisma/schema
 
 # Terminal 2 — Vite dev server with hot reload
 npm run dev:ui
