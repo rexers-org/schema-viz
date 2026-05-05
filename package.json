@@ -1,6 +1,6 @@
 {
   "name": "schema-viz",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Universal database schema visualizer",
   "author": "Rexers Research",
   "license": "MIT",
@@ -8,7 +8,10 @@
   "bin": {
     "schema-viz": "./dist/cli.js"
   },
-  "files": ["dist/"],
+  "files": [
+    "dist/",
+    "test-fixtures/"
+  ],
   "scripts": {
     "build": "npm run build:ui && npm run build:server",
     "build:ui": "vite build",
@@ -16,14 +19,19 @@
     "dev:server": "tsx src/cli.ts",
     "dev:ui": "vite",
     "start": "npm run build:ui && tsx src/cli.ts",
-    "prepublishOnly": "npm run build"
+    "test-fixtures": "tsx src/test/run.ts",
+    "prepublishOnly": "npm run build",
+    "release": "node -e \"const v=require('./package.json').version;require('child_process').execSync('git tag v'+v+' && git push origin v'+v,{stdio:'inherit'})\""
   },
   "dependencies": {
-    "chokidar": "^3.6.0"
+    "chokidar": "^3.6.0",
+    "mysql2": "^3.22.3",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4",

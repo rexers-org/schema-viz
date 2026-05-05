@@ -1,0 +1,29 @@
+{
+  "models": [
+    {
+      "name": "User",
+      "tableName": "users",
+      "fields": [
+        { "name": "id", "type": "int", "isPK": true },
+        { "name": "email", "type": "string", "isUnique": true }
+      ]
+    },
+    {
+      "name": "Post",
+      "tableName": "posts",
+      "fields": [
+        { "name": "id", "type": "int", "isPK": true },
+        { "name": "user_id", "type": "int", "isFK": true },
+        { "name": "title", "type": "string" }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "fromModel": "Post",
+      "fromField": "user_id",
+      "toModel": "User",
+      "toField": "id"
+    }
+  ]
+}

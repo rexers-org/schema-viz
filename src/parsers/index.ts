@@ -1,27 +1,30 @@
-import type { SchemaData } from "../types"
+import type { SchemaData } from "@/types"
 import { jsonParser } from "./json"
+import { laravelParser } from "./laravel"
 import { prismaParser } from "./prisma"
 
+export type ParserId = "prisma" | "laravel" | "json"
+
 export interface Parser {
+  id: ParserId
   name: string
-  /** Return true if this parser can handle the given path. */
-  detect(inputPath: string): boolean
-  /** Parse the schema at the given path and return normalized SchemaData. */
-  parse(inputPath: string): SchemaData
+  /** Shown when a single file path does not match this parser. */
+  file_requirement_hint: string
+  /** Recursively collect schema files under project root (respects shared ignore dirs). */
+  discover_files(project_root: string): string[]
+  /** Whether an absolute file path can be parsed by this parser alone. */
+  matches_single_file(abs_path: string): boolean
+  parse_files(abs_paths: string[], project_root: string): SchemaData
 }
 
 /*
- * Register parsers here in priority order. The first parser whose detect()
- * returns true will be used. Adding a new ORM/DB format means creating a new
- * file (e.g. parsers/laravel.ts) and appending it to this list.
+ * Register parsers here in priority order when no --parser is passed: the first
+ * parser that discovers any file under the project wins.
  */
-const PARSERS: Parser[] = [
-  prismaParser,
-  jsonParser,
-  // laravelParser,
-  // drizzleParser,
-]
+export const PARSERS: Parser[] = [prismaParser, laravelParser, jsonParser]
 
-export function get_parser(input_path: string): Parser | undefined {
-  return PARSERS.find((p) => p.detect(input_path))
+export const PARSERS_BY_ID: Record<ParserId, Parser> = {
+  prisma: prismaParser,
+  laravel: laravelParser,
+  json: jsonParser,
 }

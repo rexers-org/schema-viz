@@ -1,54 +1,30 @@
-import { useEffect, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 
 import SchemaDiagram from "./SchemaDiagram"
+import { GROUP_PALETTE, build_group_palette_map } from "./lib/palette"
 import type { SchemaData } from "./types"
 
-const HEADER_H = 44
-const FIELD_H = 30
-const CARD_W = 264
-const COL_GAP = 100
-const ROW_GAP = 50
-const PADDING = 40
+/** Mounted only when `data` is ready — keeps hook count stable and avoids parent early-return edge cases. */
+function SchemaDiagramView({ data }: { data: SchemaData }) {
+  const group_palette_map = useMemo(
+    () => build_group_palette_map(data.models.map((m) => m.group)),
+    [data],
+  )
 
-// Deterministic color per group name so it's stable across reloads
-const COLORS = [
-  "bg-blue-700",
-  "bg-violet-700",
-  "bg-amber-700",
-  "bg-emerald-700",
-  "bg-rose-700",
-  "bg-teal-700",
-  "bg-slate-600",
-  "bg-orange-700",
-  "bg-cyan-700",
-]
-
-function group_color(group: string): string {
-  let h = 0
-  for (const c of group) h = ((h * 31 + c.charCodeAt(0)) & 0xffff) >>> 0
-  return COLORS[h % COLORS.length]
-}
-
-function compute_layout(data: SchemaData) {
-  const positions: Record<string, { x: number; y: number }> = {}
-  let col_x = PADDING
-  let max_y = 0
-
-  for (const group_models of Object.values(data.modelsByGroup)) {
-    let row_y = PADDING
-    for (const model of group_models) {
-      positions[model.name] = { x: col_x, y: row_y }
-      row_y += HEADER_H + model.fields.length * FIELD_H + ROW_GAP
+  const colored_models = data.models.map((m) => {
+    const idx = group_palette_map.get(m.group) ?? 0
+    const pal = GROUP_PALETTE[idx]
+    return {
+      ...m,
+      headerColor: pal.header,
+      relationStroke: pal.stroke,
+      relationColorIndex: idx,
     }
-    max_y = Math.max(max_y, row_y)
-    col_x += CARD_W + COL_GAP
-  }
+  })
 
-  return {
-    positions,
-    canvasW: col_x - COL_GAP + PADDING,
-    canvasH: max_y + PADDING,
-  }
+  return (
+    <SchemaDiagram models={colored_models} relations={data.relations} parserName={data.parserName} />
+  )
 }
 
 export default function App() {
@@ -71,7 +47,6 @@ export default function App() {
   useEffect(() => {
     fetch_schema()
 
-    // SSE for live reload when schema files change
     const es = new EventSource("/api/events")
     es.onmessage = (e) => {
       if (e.data === "reload") fetch_schema()
@@ -98,20 +73,5 @@ export default function App() {
     )
   }
 
-  const { positions, canvasW, canvasH } = compute_layout(data)
-  const colored_models = data.models.map((m) => ({
-    ...m,
-    headerColor: group_color(m.group),
-  }))
-
-  return (
-    <SchemaDiagram
-      models={colored_models}
-      relations={data.relations}
-      positions={positions}
-      canvasW={canvasW}
-      canvasH={canvasH}
-      parserName={data.parserName}
-    />
-  )
+  return <SchemaDiagramView data={data} />
 }

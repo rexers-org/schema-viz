@@ -2,7 +2,17 @@
 
 > Universal database schema visualizer — point it at a schema file or directory and get an interactive ER diagram in your browser, with pan, zoom, and live reload.
 
-**Supported formats:** Prisma · JSON
+**Supported formats:** Prisma · Laravel migrations · JSON · PostgreSQL / MySQL (live URL)
+
+---
+
+## Features
+
+- **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
+- **Live reload** — file-system changes trigger an instant diagram refresh via SSE.
+- **Drag & persist** — table positions are saved to a cookie per schema, so your manual layout survives page refreshes. Reset any time with the Reset Layout button.
+- **Pan, zoom & keyboard shortcuts** — full canvas navigation.
+- **Database introspection** — connect directly with a PostgreSQL or MySQL URL; no files needed.
 
 ---
 
@@ -18,10 +28,12 @@ npm install -g schema-viz
 
 ```bash
 schema-viz <path> [options]
+schema-viz --url '<connection-string>' [options]
 ```
 
 | Option | Default | Description |
 |---|---|---|
+| `--url` | — | `postgresql://` / `postgres://` / `mysql://` connection string (instead of `<path>`) |
 | `--port=<n>` | `7337` | Port to run the local server on |
 | `--no-open` | — | Don't auto-open the browser |
 
@@ -29,9 +41,13 @@ schema-viz <path> [options]
 schema-viz ./prisma/schema
 schema-viz ./prisma/schema.prisma --port=8080
 schema-viz ./schema.json --no-open
+schema-viz --url postgresql://user:pass@localhost:5432/mydb
+schema-viz "mysql://user:pass@localhost:3306/mydb"
 ```
 
-**Supported formats:** Prisma · JSON
+Use the path keyword **`test`** to load the bundled sample project under `test-fixtures/<parser>` (default parser `prisma`; use `--parser laravel` or `--parser json` for the other fixtures). From the repo: `npm run test-fixtures` parses all three and exits non-zero on failure.
+
+Database mode uses `pg` / `mysql2`, honors TLS-related URL options (e.g. `?sslmode=require`), redacts passwords in startup logs, and does not watch files—refresh the page to re-introspect.
 
 ---
 
@@ -91,6 +107,16 @@ export const myParser: Parser = {
 ```
 
 The frontend requires no changes — it renders whatever `SchemaData` the parser returns.
+
+---
+
+## Roadmap
+
+- **More schema formats** — SQLAlchemy (Python), TypeORM, Drizzle ORM, Ruby on Rails migrations, Sequelize, Hibernate / JPA, and raw SQL (`CREATE TABLE` statements).
+- **Layout improvements** — manual column pinning, family-aware edge routing, and configurable grouping rules.
+- **Export** — PNG / SVG snapshot of the current diagram.
+- **Search & filter** — highlight tables by name, group, or relation depth.
+- **Multi-schema overlay** — compare two schema versions side-by-side.
 
 ---
 
