@@ -384,7 +384,7 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
   return (
     <div className="flex flex-col h-screen bg-[#0d1117] select-none">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/[0.06] shrink-0 cursor-default select-none">
+      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/6 shrink-0 cursor-default select-none">
         <div className="flex items-center gap-3">
           <span className="text-white text-sm font-semibold">Schema Viz</span>
           <span className="text-gray-600 text-[11px] bg-white/5 px-2 py-0.5 rounded-full">{parserName}</span>
@@ -503,7 +503,7 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
                 className={clsx(
                   "absolute rounded-lg overflow-hidden shadow-2xl border border-white/[0.07] touch-none select-none",
                   is_dragging ? "cursor-grabbing" : "cursor-move",
-                  is_dragging && "z-[100] shadow-black/80 ring-2 ring-white/25",
+                  is_dragging && "z-100 shadow-black/80 ring-2 ring-white/25",
                 )}
                 style={{
                   left: pos.x,
@@ -534,7 +534,7 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
                     <div
                       key={field.name}
                       className={clsx(
-                        "flex items-center justify-between px-2.5 border-b border-white/[0.04]",
+                        "flex items-center justify-between px-2.5 border-b border-white/4",
                         is_dragging ? "cursor-grabbing" : "cursor-move",
                         field.isPK && "bg-amber-950/25",
                         field.isFK && !field.isPK && "bg-sky-950/25",
