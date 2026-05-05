@@ -4,6 +4,10 @@
   "description": "Universal database schema visualizer",
   "author": "Rexers Research",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rexers-org/schema-viz"
+  },
   "type": "commonjs",
   "bin": {
     "schema-viz": "dist/cli.js"
