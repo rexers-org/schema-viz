@@ -1,0 +1,39 @@
+{
+  "name": "schema-viz",
+  "version": "0.1.0",
+  "description": "Universal database schema visualizer",
+  "author": "Rexers Research",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "schema-viz": "./dist/cli.js"
+  },
+  "files": ["dist/"],
+  "scripts": {
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "vite build",
+    "build:server": "tsup",
+    "dev:server": "tsx src/cli.ts",
+    "dev:ui": "vite",
+    "start": "npm run build:ui && tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitejs/plugin-react": "^4",
+    "clsx": "^2",
+    "react": "^18",
+    "react-dom": "^18",
+    "tailwindcss": "^4",
+    "tsup": "^8",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vite": "^6"
+  }
+}
