@@ -1,17 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react"
 
 import SchemaDiagram from "./SchemaDiagram"
+import { fetch_layout, type SavedLayout } from "./lib/api-layout"
 import { GROUP_PALETTE, build_group_palette_map } from "./lib/palette"
 import type { SchemaData } from "./types"
 
-/** Mounted only when `data` is ready — keeps hook count stable and avoids parent early-return edge cases. */
-function SchemaDiagramView({ data }: { data: SchemaData }) {
+type DiagramData = { schema: SchemaData; layout: SavedLayout | null }
+
+function SchemaDiagramView({ data }: { data: DiagramData }) {
   const group_palette_map = useMemo(
-    () => build_group_palette_map(data.models.map((m) => m.group)),
-    [data],
+    () => build_group_palette_map(data.schema.models.map((m) => m.group)),
+    [data.schema],
   )
 
-  const colored_models = data.models.map((m) => {
+  const colored_models = data.schema.models.map((m) => {
     const idx = group_palette_map.get(m.group) ?? 0
     const pal = GROUP_PALETTE[idx]
     return {
@@ -23,21 +25,29 @@ function SchemaDiagramView({ data }: { data: SchemaData }) {
   })
 
   return (
-    <SchemaDiagram models={colored_models} relations={data.relations} parserName={data.parserName} />
+    <SchemaDiagram
+      models={colored_models}
+      relations={data.schema.relations}
+      parserName={data.schema.parserName}
+      savedLayout={data.layout}
+    />
   )
 }
 
 export default function App() {
-  const [data, set_data] = useState<SchemaData | null>(null)
+  const [data, set_data] = useState<DiagramData | null>(null)
   const [error, set_error] = useState<string | null>(null)
 
-  const fetch_schema = () => {
-    fetch("/api/schema")
-      .then((r) => r.json())
-      .then((d: SchemaData & { error?: string }) => {
-        if (d.error) set_error(d.error)
-        else {
-          set_data(d)
+  const fetch_all = () => {
+    Promise.all([
+      fetch("/api/schema").then((r) => r.json() as Promise<SchemaData & { error?: string }>),
+      fetch_layout(),
+    ])
+      .then(([schema, layout]) => {
+        if (schema.error) {
+          set_error(schema.error)
+        } else {
+          set_data({ schema, layout })
           set_error(null)
         }
       })
@@ -45,11 +55,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    fetch_schema()
+    fetch_all()
 
     const es = new EventSource("/api/events")
     es.onmessage = (e) => {
-      if (e.data === "reload") fetch_schema()
+      if (e.data === "reload") fetch_all()
     }
     return () => es.close()
   }, [])

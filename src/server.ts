@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from "fs"
 import { createServer, type IncomingMessage, type ServerResponse } from "http"
 import path from "path"
 
+import { clear_layout, ensure_cache_dir, load_layout, save_layout, type LayoutFile } from "./lib/layout-store"
 import type { SchemaSource } from "./schema-source"
 
 const MIME: Record<string, string> = {
@@ -23,7 +24,24 @@ function serve_file(res: ServerResponse, file_path: string) {
   createReadStream(file_path).pipe(res)
 }
 
-export function start_server(source: SchemaSource, port: number, public_dir: string) {
+function read_body(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on("data", (chunk: Buffer) => chunks.push(chunk))
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")))
+    req.on("error", reject)
+  })
+}
+
+type ServerOptions = {
+  share_mode: boolean
+  project_root: string
+  source_key: string
+}
+
+export function start_server(source: SchemaSource, port: number, public_dir: string, opts: ServerOptions) {
+  const { share_mode, project_root, source_key } = opts
+  if (!share_mode) ensure_cache_dir()
   const sse_clients = new Set<ServerResponse>()
   const notify_clients = () => {
     for (const client of sse_clients) client.write("data: reload\n\n")
@@ -42,6 +60,41 @@ export function start_server(source: SchemaSource, port: number, public_dir: str
         (e: unknown) => send_json(res, 500, { error: String(e) }),
       )
       return
+    }
+
+    if (url.pathname === "/api/config") {
+      send_json(res, 200, { shareMode: share_mode })
+      return
+    }
+
+    if (url.pathname === "/api/layout") {
+      if (req.method === "GET") {
+        const data = load_layout(share_mode, project_root, source_key)
+        send_json(res, 200, data ?? null)
+        return
+      }
+
+      if (req.method === "POST") {
+        void read_body(req).then(
+          (body) => {
+            try {
+              const data = JSON.parse(body) as LayoutFile
+              save_layout(share_mode, project_root, source_key, data)
+              send_json(res, 200, { ok: true })
+            } catch {
+              send_json(res, 400, { error: "invalid JSON" })
+            }
+          },
+          () => send_json(res, 400, { error: "read error" }),
+        )
+        return
+      }
+
+      if (req.method === "DELETE") {
+        clear_layout(share_mode, project_root, source_key)
+        send_json(res, 200, { ok: true })
+        return
+      }
     }
 
     if (url.pathname === "/api/events") {

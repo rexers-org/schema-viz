@@ -4,18 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { GROUP_PALETTE } from "./lib/palette"
 import { compute_relation_aware_positions } from "./lib/layout"
 import type { Model, Relation } from "./types"
-import {
-  clear_table_layout_cookie,
-  load_table_layout_cookie,
-  save_table_layout_cookie,
-  schema_drag_key,
-  type TablePositionsMap,
-} from "./lib/table-positions"
-import {
-  clear_viewport_cookie,
-  load_viewport_cookie,
-  save_viewport_cookie,
-} from "./lib/viewport"
+import { clear_layout, save_layout, type SavedLayout } from "./lib/api-layout"
+import { parser_info } from "./lib/parser-logos"
+import { schema_drag_key, type TablePositionsMap } from "./lib/table-positions"
 
 export type ColoredModel = Model & {
   headerColor: string
@@ -27,6 +18,7 @@ type Props = {
   models: ColoredModel[]
   relations: Relation[]
   parserName: string
+  savedLayout: SavedLayout | null
 }
 
 const HEADER_H = 44
@@ -131,7 +123,7 @@ function compute_lines(
   return lines
 }
 
-export default function SchemaDiagram({ models, relations, parserName }: Props) {
+export default function SchemaDiagram({ models, relations, parserName, savedLayout }: Props) {
   const wrapper_ref = useRef<HTMLDivElement>(null)
   const last_pos = useRef({ x: 0, y: 0 })
   const transform_ref = useRef(DEFAULT_VIEW_TRANSFORM)
@@ -140,11 +132,7 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
 
   const skip_next_viewport_persist = useRef(true)
 
-  const [transform, set_transform] = useState(() =>
-    typeof document !== "undefined"
-      ? load_viewport_cookie(parserName) ?? DEFAULT_VIEW_TRANSFORM
-      : DEFAULT_VIEW_TRANSFORM,
-  )
+  const [transform, set_transform] = useState(() => savedLayout?.viewport ?? DEFAULT_VIEW_TRANSFORM)
 
   transform_ref.current = transform
 
@@ -158,42 +146,39 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
     }
 
     const id = window.setTimeout(() => {
-      save_viewport_cookie({ ...transform, parserName: parser_name_ref.current })
+      save_layout({
+        v: 1,
+        sigHash: layout_sig_ref.current,
+        positions: position_overrides_ref.current,
+        viewport: transform,
+      })
     }, VIEWPORT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(id)
   }, [transform])
 
+  const flush_layout = () => {
+    save_layout({
+      v: 1,
+      sigHash: layout_sig_ref.current,
+      positions: position_overrides_ref.current,
+      viewport: transform_ref.current,
+    })
+  }
+
   useEffect(() => {
-    const flush_viewport = () => {
-      save_viewport_cookie({ ...transform_ref.current, parserName: parser_name_ref.current })
-    }
-
-    const flush_tables = () => {
-      const pmap = position_overrides_ref.current
-      const pn = parser_name_ref.current
-      const sig = layout_sig_ref.current
-      if (Object.keys(pmap).length === 0) clear_table_layout_cookie()
-      else save_table_layout_cookie(pn, pmap, sig)
-    }
-
-    window.addEventListener("pagehide", flush_viewport)
-    window.addEventListener("pagehide", flush_tables)
-
+    const on_pagehide = () => flush_layout()
     const on_visibility = () => {
-      if (document.visibilityState === "hidden") {
-        flush_viewport()
-        flush_tables()
-      }
+      if (document.visibilityState === "hidden") flush_layout()
     }
+
+    window.addEventListener("pagehide", on_pagehide)
     document.addEventListener("visibilitychange", on_visibility)
 
     return () => {
-      window.removeEventListener("pagehide", flush_viewport)
-      window.removeEventListener("pagehide", flush_tables)
+      window.removeEventListener("pagehide", on_pagehide)
       document.removeEventListener("visibilitychange", on_visibility)
-      flush_viewport()
-      flush_tables()
+      flush_layout()
     }
   }, [])
 
@@ -207,9 +192,15 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
   layout_sig_ref.current = drag_signature
 
   const [position_overrides, set_position_overrides] = useState<TablePositionsMap>(() => {
-    if (typeof document === "undefined") return {}
+    if (!savedLayout) return {}
+    const current_sig = schema_drag_key(models, relations)
+    if (savedLayout.sigHash !== current_sig) return {}
     const names = new Set(models.map((m) => m.name))
-    return load_table_layout_cookie(parserName, names, schema_drag_key(models, relations))
+    const out: TablePositionsMap = {}
+    for (const [k, v] of Object.entries(savedLayout.positions)) {
+      if (names.has(k)) out[k] = v
+    }
+    return out
   })
 
   const position_overrides_ref = useRef(position_overrides)
@@ -222,10 +213,9 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
     }
     if (prev_parser_ref.current !== parserName) {
       prev_parser_ref.current = parserName
-      set_transform(load_viewport_cookie(parserName) ?? DEFAULT_VIEW_TRANSFORM)
+      set_transform(DEFAULT_VIEW_TRANSFORM)
       skip_next_viewport_persist.current = true
-      const names = new Set(models.map((m) => m.name))
-      set_position_overrides(load_table_layout_cookie(parserName, names, schema_drag_key(models, relations)))
+      set_position_overrides({})
       skip_next_layout_persist.current = true
     }
   }, [parserName])
@@ -237,11 +227,12 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
     }
 
     const id = window.setTimeout(() => {
-      const pmap = position_overrides_ref.current
-      const pname = parser_name_ref.current
-      const dk = layout_sig_ref.current
-      if (Object.keys(pmap).length === 0) clear_table_layout_cookie()
-      else save_table_layout_cookie(pname, pmap, dk)
+      save_layout({
+        v: 1,
+        sigHash: layout_sig_ref.current,
+        positions: position_overrides_ref.current,
+        viewport: transform_ref.current,
+      })
     }, VIEWPORT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(id)
@@ -275,6 +266,7 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
   const [dragging_model, set_dragging_model] = useState<string | null>(null)
 
   const lines = compute_lines(models, relations, layout_positions)
+  const { Logo, label: parser_label, color: parser_color } = parser_info(parserName)
 
   // Ctrl+scroll → zoom (incl. trackpad pinch). Otherwise pan with deltaX / deltaY
   // (two-finger horizontal swipe uses deltaX; vertical uses deltaY).
@@ -385,9 +377,9 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
     <div className="flex flex-col h-screen bg-[#0d1117] select-none">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/6 shrink-0 cursor-default select-none">
-        <div className="flex items-center gap-3">
-          <span className="text-white text-sm font-semibold">Schema Viz</span>
-          <span className="text-gray-600 text-[11px] bg-white/5 px-2 py-0.5 rounded-full">{parserName}</span>
+        <div className="flex items-center gap-2.5">
+          <Logo size={18} className={parser_color} />
+          <span className="text-white text-sm font-semibold">{parser_label}</span>
           <span className="text-gray-600 text-xs">
             {models.length} models · {relations.length} relations
           </span>
@@ -414,17 +406,12 @@ export default function SchemaDiagram({ models, relations, parserName }: Props) 
 
           <button
             onClick={() => {
-              clear_viewport_cookie()
-              clear_table_layout_cookie()
-              // Clear drag overrides → layout matches `defaultPositions` (relation-aware pre-layout).
-              set_position_overrides({})
               set_transform(DEFAULT_VIEW_TRANSFORM)
-              skip_next_layout_persist.current = true
               skip_next_viewport_persist.current = true
             }}
             className="text-[11px] text-gray-600 hover:text-gray-300 transition-colors cursor-pointer"
           >
-            Reset
+            Reset view
           </button>
         </div>
       </div>

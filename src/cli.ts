@@ -23,6 +23,7 @@ const argv = process.argv.slice(2)
 let schema_path_raw: string | undefined
 let database_url_flag: string | undefined
 let auto_open = false
+let share_mode = false
 let port = 7337
 let parser_raw: string | undefined
 
@@ -30,6 +31,10 @@ for (let i = 0; i < argv.length; i++) {
   const a = argv[i]
   if (a === "--autoopen" || a === "--auto-open") {
     auto_open = true
+    continue
+  }
+  if (a === "--share") {
+    share_mode = true
     continue
   }
   if (a === "--url") {
@@ -107,6 +112,7 @@ if (!effective_database_url && !file_path_arg) {
   console.error("    --url <connection-string>      PostgreSQL or MySQL URL (alternative to <path>)")
   console.error("    --parser prisma|laravel|json   Only for file-based schemas")
   console.error("    --autoopen                    Open browser (default: do not open)")
+  console.error("    --share                       Save layout to .schema-viz.json in the project (shareable)")
   console.error("    --port=7337")
   console.error("")
   console.error("  <path> may be a project directory, schema file, or DB URL starting with")
@@ -164,9 +170,12 @@ if (!resolved) {
 
 const public_dir = path.join(__dirname, "..", "dist", "public")
 const source = create_schema_source(resolved)
-start_server(source, port, public_dir)
+const project_root = resolved.source === "files" ? resolved.project_root : process.cwd()
+const source_key = resolved.source === "files" ? resolved.project_root : resolved.database_url
+start_server(source, port, public_dir, { share_mode, project_root, source_key })
 
 console.log(`  URL    : http://localhost:${port}`)
+console.log(`  Layout : ${share_mode ? `${project_root}/.schema-viz.json (--share)` : "~/.schema-viz/ (cache)"}`)
 if (resolved.source === "files") {
   console.log(`  Files  : ${resolved.discovered_files.length} (initial)`)
   console.log(`  Reload : parses again on refresh (project mode re-scans subtree)`)

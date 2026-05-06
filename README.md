@@ -8,6 +8,7 @@
 
 ## Release Note
 
+- `0.2.2` — server-side layout persistence: table positions and viewport saved to `~/.schema-viz/` by default; `--share` flag saves to `.schema-viz.json` in the project root for team sharing.
 - `0.2.1` — documentation update (README and publishing-related docs alignment).
 - `0.2.0` — added live database introspection for PostgreSQL/MySQL, parser filter support (`--parser`), and browser auto-open toggle (`--autoopen` / `--auto-open`).
 
@@ -17,7 +18,7 @@
 
 - **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
 - **Live reload** — file-system changes trigger an instant diagram refresh via SSE.
-- **Drag & persist** — table positions are saved to a cookie per schema, so your manual layout survives page refreshes. Reset any time with the Reset Layout button.
+- **Drag & persist** — table positions and viewport are saved server-side and survive browser restarts and device switches. See [Layout persistence](#layout-persistence).
 - **Pan, zoom & keyboard shortcuts** — full canvas navigation.
 - **Database introspection** — connect directly with a PostgreSQL or MySQL URL; no files needed.
 
@@ -44,6 +45,7 @@ schema-viz --url '<connection-string>' [options]
 | `--parser=<id>` | auto-detect | Restrict parser for file input: `prisma` / `laravel` / `json` |
 | `--port=<n>` | `7337` | Port to run the local server on |
 | `--autoopen` (`--auto-open`) | off | Auto-open the browser after server starts |
+| `--share` | off | Save layout to `.schema-viz.json` in the project root (see [Layout persistence](#layout-persistence)) |
 
 ```bash
 schema-viz ./prisma/schema
@@ -69,6 +71,53 @@ Database mode uses `pg` / `mysql2`, honors TLS-related URL options (e.g. `?sslmo
 | Zoom | Ctrl + scroll |
 | Zoom in / out | `+` / `−` buttons |
 | Reset view | Reset button |
+
+---
+
+## Layout persistence
+
+Every time you drag a table or pan/zoom the canvas, the layout is saved automatically through the local server — no manual action needed. The viewport resets with **Reset view** (top-right), but your table positions are preserved.
+
+### Default — personal cache
+
+By default the layout is written to a JSON file under `~/.schema-viz/`, keyed by a hash of the project path.
+
+```
+~/.schema-viz/
+  a3f8c2d1e5b7c9f0.json   ← layout for one project
+  f1e2d3c4b5a69870.json   ← layout for another
+```
+
+This is private to your machine and survives across browser restarts and device switches.
+
+### `--share` — commit alongside your project
+
+Pass `--share` to save the layout into `.schema-viz.json` at the project root instead:
+
+```bash
+schema-viz ./prisma/schema --share
+```
+
+```
+your-project/
+  prisma/schema.prisma
+  .schema-viz.json        ← committed layout, shared with the team
+```
+
+Any team member who runs `schema-viz --share` from the same project will load the same table positions.
+
+> **To clear a layout**, delete the corresponding file:
+>
+> ```bash
+> # Default cache — remove the file for a specific project
+> rm ~/.schema-viz/<hash>.json
+>
+> # Or wipe the entire cache
+> rm -rf ~/.schema-viz/
+>
+> # Share mode
+> rm .schema-viz.json
+> ```
 
 ---
 
