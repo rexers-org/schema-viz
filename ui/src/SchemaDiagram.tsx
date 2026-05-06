@@ -29,7 +29,7 @@ const DEFAULT_VIEW_TRANSFORM = { x: 40, y: 40, zoom: 0.9 }
 const VIEWPORT_SAVE_DEBOUNCE_MS = 280
 const CARD_DRAG_PAD = 48
 
-type LinePath = { d: string; id: string; stroke: string; marker_index: number }
+type LinePath = { d: string; id: string; stroke: string; marker_index: number; from_model: string; to_model: string }
 
 function model_card_height(model: { fields: { length: number } }): number {
   return HEADER_H + model.fields.length * FIELD_H
@@ -117,6 +117,8 @@ function compute_lines(
       id: line_id,
       stroke: from_model.relationStroke,
       marker_index: from_model.relationColorIndex,
+      from_model: rel.fromModel,
+      to_model: rel.toModel,
     })
   }
 
@@ -264,9 +266,22 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
 
   const drag_last_screen = useRef({ x: 0, y: 0 })
   const [dragging_model, set_dragging_model] = useState<string | null>(null)
+  const [selected_model, set_selected_model] = useState<string | null>(null)
+  const card_drag_moved = useRef(false)
+  const canvas_panned = useRef(false)
 
   const lines = compute_lines(models, relations, layout_positions)
   const { Logo, label: parser_label, color: parser_color } = parser_info(parserName)
+
+  const selected_related = useMemo(() => {
+    if (!selected_model) return null
+    const s = new Set<string>()
+    for (const rel of relations) {
+      if (rel.fromModel === selected_model) s.add(rel.toModel)
+      if (rel.toModel === selected_model) s.add(rel.fromModel)
+    }
+    return s
+  }, [selected_model, relations])
 
   // Ctrl+scroll → zoom (incl. trackpad pinch). Otherwise pan with deltaX / deltaY
   // (two-finger horizontal swipe uses deltaX; vertical uses deltaY).
@@ -316,12 +331,14 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   const on_pointer_down = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     if ((e.target as HTMLElement).closest("[data-model-card]")) return
+    canvas_panned.current = false
     e.currentTarget.setPointerCapture(e.pointerId)
     last_pos.current = { x: e.clientX, y: e.clientY }
   }
 
   const on_pointer_move = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    canvas_panned.current = true
     const dx = e.clientX - last_pos.current.x
     const dy = e.clientY - last_pos.current.y
     last_pos.current = { x: e.clientX, y: e.clientY }
@@ -329,7 +346,9 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   }
 
   const on_pointer_up = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.currentTarget.releasePointerCapture(e.pointerId)
+    if (!canvas_panned.current) set_selected_model(null)
   }
 
   const zoom_by = (factor: number) =>
@@ -339,7 +358,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     return (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return
       e.stopPropagation()
-      set_dragging_model(model_name)
+      card_drag_moved.current = false
       drag_last_screen.current = { x: e.clientX, y: e.clientY }
       e.currentTarget.setPointerCapture(e.pointerId)
       e.preventDefault()
@@ -349,6 +368,8 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   const on_card_pointer_move = useCallback((model_name: string) => {
     return (e: React.PointerEvent<HTMLDivElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+      card_drag_moved.current = true
+      set_dragging_model(model_name)
 
       const z = transform_ref.current.zoom
       const dx = (e.clientX - drag_last_screen.current.x) / z
@@ -367,10 +388,14 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     }
   }, [])
 
-  const on_card_pointer_up = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId))
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    set_dragging_model(null)
+  const on_card_pointer_up = useCallback((model_name: string) => {
+    return (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.currentTarget.hasPointerCapture(e.pointerId))
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      set_dragging_model(null)
+      if (!card_drag_moved.current)
+        set_selected_model((prev) => (prev === model_name ? null : model_name))
+    }
   }, [])
 
   return (
@@ -466,16 +491,31 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
                 </marker>
               ))}
             </defs>
-            {lines.map((line) => (
-              <path
-                key={line.id}
-                d={line.d}
-                stroke={line.stroke}
-                strokeWidth={1.5}
-                fill="none"
-                markerEnd={`url(#schema-viz-arrow-${line.marker_index})`}
-              />
-            ))}
+            {lines.map((line) => {
+              const is_from = selected_model === line.from_model
+              const is_to = selected_model === line.to_model
+              const is_active = is_from || is_to
+              const is_dimmed = selected_model !== null && !is_active
+              return (
+                <path
+                  key={line.id}
+                  d={line.d}
+                  stroke={line.stroke}
+                  strokeWidth={is_active ? 2 : 1.5}
+                  fill="none"
+                  markerEnd={is_dimmed ? undefined : `url(#schema-viz-arrow-${line.marker_index})`}
+                  style={{
+                    opacity: is_dimmed ? 0.06 : 1,
+                    strokeDasharray: is_active ? "8 5" : undefined,
+                    animation: is_from
+                      ? "sv-flow 0.5s linear infinite"
+                      : is_to
+                      ? "sv-flow-rev 0.5s linear infinite"
+                      : undefined,
+                  }}
+                />
+              )
+            })}
           </svg>
 
           {/* Model cards */}
@@ -483,30 +523,45 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
             const pos = layout_positions[model.name]
             if (!pos) return null
             const is_dragging = dragging_model === model.name
+            const is_selected = selected_model === model.name
+            const is_related = selected_model !== null && selected_related!.has(model.name)
+            const is_dimmed = selected_model !== null && !is_selected && !is_related
             return (
               <div
                 key={model.name}
                 data-model-card
                 className={clsx(
-                  "absolute rounded-lg overflow-hidden shadow-2xl border border-white/[0.07] touch-none select-none",
-                  is_dragging ? "cursor-grabbing" : "cursor-move",
-                  is_dragging && "z-100 shadow-black/80 ring-2 ring-white/25",
+                  "absolute rounded-lg overflow-hidden shadow-2xl border touch-none select-none",
+                  is_dragging ? "cursor-grabbing" : "cursor-pointer",
+                  is_dimmed ? "border-white/3" : "border-white/[0.07]",
                 )}
                 style={{
                   left: pos.x,
                   top: pos.y,
                   width: CARD_W,
-                  zIndex: is_dragging ? 100 : 1,
+                  zIndex: is_dragging ? 100 : is_selected ? 10 : 1,
+                  transition: "opacity 0.15s, filter 0.15s",
+                  ...(is_dimmed && { opacity: 0.18, filter: "grayscale(1)" }),
+                  ...(is_selected && {
+                    outline: `2px solid ${model.relationStroke}`,
+                    outlineOffset: "-1px",
+                    boxShadow: `0 0 24px ${model.relationStroke}50`,
+                  }),
+                  ...(is_dragging && !is_selected && {
+                    outline: "2px solid rgba(255,255,255,0.25)",
+                    outlineOffset: "-1px",
+                    boxShadow: "0 8px 40px rgba(0,0,0,0.8)",
+                  }),
                 }}
                 onPointerDown={on_card_pointer_down(model.name)}
                 onPointerMove={on_card_pointer_move(model.name)}
-                onPointerUp={on_card_pointer_up}
-                onPointerCancel={on_card_pointer_up}
+                onPointerUp={on_card_pointer_up(model.name)}
+                onPointerCancel={on_card_pointer_up(model.name)}
               >
                 <div
                   className={clsx(
                     "px-3 flex flex-col justify-center border-b border-black/30",
-                    is_dragging ? "cursor-grabbing" : "cursor-move",
+                    is_dragging ? "cursor-grabbing" : "cursor-pointer",
                     model.headerColor,
                   )}
                   style={{ height: HEADER_H }}
@@ -522,7 +577,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
                       key={field.name}
                       className={clsx(
                         "flex items-center justify-between px-2.5 border-b border-white/4",
-                        is_dragging ? "cursor-grabbing" : "cursor-move",
+                        is_dragging ? "cursor-grabbing" : "cursor-pointer",
                         field.isPK && "bg-amber-950/25",
                         field.isFK && !field.isPK && "bg-sky-950/25",
                       )}

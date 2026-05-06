@@ -8,7 +8,7 @@
 
 ## Release Note
 
-- `0.2.2` — server-side layout persistence: table positions and viewport saved to `~/.schema-viz/` by default; `--share` flag saves to `.schema-viz.json` in the project root for team sharing.
+- `0.3.0` — table selection: click any table to highlight it and its FK relations; unrelated tables dim out. Framework logos in toolbar (Prisma, Laravel, PostgreSQL, MySQL, JSON). Server-side layout persistence with `--share` flag.
 - `0.2.1` — documentation update (README and publishing-related docs alignment).
 - `0.2.0` — added live database introspection for PostgreSQL/MySQL, parser filter support (`--parser`), and browser auto-open toggle (`--autoopen` / `--auto-open`).
 
@@ -17,9 +17,11 @@
 ## Features
 
 - **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
+- **Table selection** — click any table to highlight it. Directly related tables (FK in or out) stay visible; all others dim out. FK lines animate with a directional flow to show the relationship direction. Click the same table or the canvas background to deselect.
+- **Drag & persist** — drag tables to rearrange; positions and viewport are saved server-side and survive browser restarts. See [Layout persistence](#layout-persistence).
+- **Framework logos** — the toolbar shows the detected framework logo (Prisma, Laravel, PostgreSQL, MySQL, JSON) instead of a plain text badge.
 - **Live reload** — file-system changes trigger an instant diagram refresh via SSE.
-- **Drag & persist** — table positions and viewport are saved server-side and survive browser restarts and device switches. See [Layout persistence](#layout-persistence).
-- **Pan, zoom & keyboard shortcuts** — full canvas navigation.
+- **Pan, zoom** — full canvas navigation; **Reset view** restores pan and zoom without touching table positions.
 - **Database introspection** — connect directly with a PostgreSQL or MySQL URL; no files needed.
 
 ---
@@ -70,7 +72,9 @@ Database mode uses `pg` / `mysql2`, honors TLS-related URL options (e.g. `?sslmo
 | Scroll horizontally | Shift + scroll |
 | Zoom | Ctrl + scroll |
 | Zoom in / out | `+` / `−` buttons |
-| Reset view | Reset button |
+| Reset pan & zoom | Reset view button |
+| Select table | Click table card |
+| Deselect | Click canvas background |
 
 ---
 

@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+@keyframes sv-flow {
+  to { stroke-dashoffset: -26; }
+}
+@keyframes sv-flow-rev {
+  to { stroke-dashoffset: 26; }
+}
