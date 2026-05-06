@@ -4,7 +4,6 @@ export type SavedLayout = {
   v: 1
   sigHash: string
   positions: TablePositionsMap
-  viewport: { x: number; y: number; zoom: number }
 }
 
 export async function fetch_layout(): Promise<SavedLayout | null> {

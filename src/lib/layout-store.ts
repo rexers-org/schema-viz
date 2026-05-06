@@ -7,7 +7,6 @@ export type LayoutFile = {
   v: 1
   sigHash: string
   positions: Record<string, { x: number; y: number }>
-  viewport: { x: number; y: number; zoom: number }
 }
 
 export function sig_hash(schema_signature: string): string {

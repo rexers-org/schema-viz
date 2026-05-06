@@ -8,6 +8,7 @@
 
 ## Release Note
 
+- `0.3.1` — select / edit mode switcher (Figma-style bottom pill, `V` / `E`); auto-detect `.schema-viz.json` for share mode; redesigned dark theme with frosted-glass toolbar.
 - `0.3.0` — table selection: click any table to highlight it and its FK relations; unrelated tables dim out. Framework logos in toolbar (Prisma, Laravel, PostgreSQL, MySQL, JSON). Server-side layout persistence with `--share` flag.
 - `0.2.1` — documentation update (README and publishing-related docs alignment).
 - `0.2.0` — added live database introspection for PostgreSQL/MySQL, parser filter support (`--parser`), and browser auto-open toggle (`--autoopen` / `--auto-open`).
@@ -17,8 +18,10 @@
 ## Features
 
 - **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
+- **Select / Edit modes** — a Figma-style pill at the bottom centre switches between **Select** (`V`) and **Edit** (`E`). In Select mode click any table to highlight it; in Edit mode drag tables to rearrange them. Both modes support selection; only Edit mode allows dragging.
 - **Table selection** — click any table to highlight it. Directly related tables (FK in or out) stay visible; all others dim out. FK lines animate with a directional flow to show the relationship direction. Click the same table or the canvas background to deselect.
-- **Drag & persist** — drag tables to rearrange; positions and viewport are saved server-side and survive browser restarts. See [Layout persistence](#layout-persistence).
+- **Drag & persist** — switch to Edit mode and drag tables to rearrange; positions are saved server-side and survive browser restarts. See [Layout persistence](#layout-persistence).
+- **Auto share-mode detection** — if `.schema-viz.json` already exists in the project root, share mode activates automatically without needing `--share`.
 - **Framework logos** — the toolbar shows the detected framework logo (Prisma, Laravel, PostgreSQL, MySQL, JSON) instead of a plain text badge.
 - **Live reload** — file-system changes trigger an instant diagram refresh via SSE.
 - **Pan, zoom** — full canvas navigation; **Reset view** restores pan and zoom without touching table positions.
@@ -67,14 +70,17 @@ Database mode uses `pg` / `mysql2`, honors TLS-related URL options (e.g. `?sslmo
 
 | Action | Control |
 |---|---|
-| Pan | Click and drag |
+| Pan | Click and drag on canvas |
 | Scroll vertically | Scroll |
 | Scroll horizontally | Shift + scroll |
 | Zoom | Ctrl + scroll |
 | Zoom in / out | `+` / `−` buttons |
 | Reset pan & zoom | Reset view button |
-| Select table | Click table card |
+| Select table | Click table card (any mode) |
 | Deselect | Click canvas background |
+| Move table | Drag card (Edit mode) |
+| Switch to Select mode | `V` or bottom-left pill |
+| Switch to Edit mode | `E` or bottom-left pill |
 
 ---
 

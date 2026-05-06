@@ -7,6 +7,7 @@ import type { Model, Relation } from "./types"
 import { clear_layout, save_layout, type SavedLayout } from "./lib/api-layout"
 import { parser_info } from "./lib/parser-logos"
 import { schema_drag_key, type TablePositionsMap } from "./lib/table-positions"
+import { clear_viewport_cookie, load_viewport_cookie, save_viewport_cookie } from "./lib/viewport"
 
 export type ColoredModel = Model & {
   headerColor: string
@@ -25,11 +26,12 @@ const HEADER_H = 44
 const FIELD_H = 30
 const CARD_W = 264
 
-const DEFAULT_VIEW_TRANSFORM = { x: 40, y: 40, zoom: 0.9 }
+const DEFAULT_VIEW_TRANSFORM = { x: 40, y: 72, zoom: 0.9 }
 const VIEWPORT_SAVE_DEBOUNCE_MS = 280
 const CARD_DRAG_PAD = 48
 
 type LinePath = { d: string; id: string; stroke: string; marker_index: number; from_model: string; to_model: string }
+type InteractionMode = "select" | "edit"
 
 function model_card_height(model: { fields: { length: number } }): number {
   return HEADER_H + model.fields.length * FIELD_H
@@ -134,7 +136,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
 
   const skip_next_viewport_persist = useRef(true)
 
-  const [transform, set_transform] = useState(() => savedLayout?.viewport ?? DEFAULT_VIEW_TRANSFORM)
+  const [transform, set_transform] = useState(() => load_viewport_cookie(parserName) ?? DEFAULT_VIEW_TRANSFORM)
 
   transform_ref.current = transform
 
@@ -148,30 +150,24 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     }
 
     const id = window.setTimeout(() => {
-      save_layout({
-        v: 1,
-        sigHash: layout_sig_ref.current,
-        positions: position_overrides_ref.current,
-        viewport: transform,
-      })
+      save_viewport_cookie({ ...transform, parserName: parser_name_ref.current })
     }, VIEWPORT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(id)
   }, [transform])
 
   const flush_layout = () => {
-    save_layout({
-      v: 1,
-      sigHash: layout_sig_ref.current,
-      positions: position_overrides_ref.current,
-      viewport: transform_ref.current,
-    })
+    save_layout({ v: 1, sigHash: layout_sig_ref.current, positions: position_overrides_ref.current })
+  }
+
+  const flush_viewport = () => {
+    save_viewport_cookie({ ...transform_ref.current, parserName: parser_name_ref.current })
   }
 
   useEffect(() => {
-    const on_pagehide = () => flush_layout()
+    const on_pagehide = () => { flush_layout(); flush_viewport() }
     const on_visibility = () => {
-      if (document.visibilityState === "hidden") flush_layout()
+      if (document.visibilityState === "hidden") { flush_layout(); flush_viewport() }
     }
 
     window.addEventListener("pagehide", on_pagehide)
@@ -215,7 +211,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     }
     if (prev_parser_ref.current !== parserName) {
       prev_parser_ref.current = parserName
-      set_transform(DEFAULT_VIEW_TRANSFORM)
+      set_transform(load_viewport_cookie(parserName) ?? DEFAULT_VIEW_TRANSFORM)
       skip_next_viewport_persist.current = true
       set_position_overrides({})
       skip_next_layout_persist.current = true
@@ -229,12 +225,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     }
 
     const id = window.setTimeout(() => {
-      save_layout({
-        v: 1,
-        sigHash: layout_sig_ref.current,
-        positions: position_overrides_ref.current,
-        viewport: transform_ref.current,
-      })
+      save_layout({ v: 1, sigHash: layout_sig_ref.current, positions: position_overrides_ref.current })
     }, VIEWPORT_SAVE_DEBOUNCE_MS)
 
     return () => window.clearTimeout(id)
@@ -269,6 +260,12 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   const [selected_model, set_selected_model] = useState<string | null>(null)
   const card_drag_moved = useRef(false)
   const canvas_panned = useRef(false)
+
+  const [mode, set_mode] = useState<InteractionMode>("select")
+  const mode_ref = useRef<InteractionMode>("select")
+  mode_ref.current = mode
+
+  const [canvas_dragging, set_canvas_dragging] = useState(false)
 
   const lines = compute_lines(models, relations, layout_positions)
   const { Logo, label: parser_label, color: parser_color } = parser_info(parserName)
@@ -327,6 +324,17 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     return () => el.removeEventListener("wheel", on_wheel)
   }, [on_wheel])
 
+  useEffect(() => {
+    const on_key = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return
+      if (e.key === "v" || e.key === "V") set_mode("select")
+      if (e.key === "e" || e.key === "E") set_mode("edit")
+    }
+    window.addEventListener("keydown", on_key)
+    return () => window.removeEventListener("keydown", on_key)
+  }, [])
+
   // Canvas pan — ignore starts on model cards (they handle their own drag)
   const on_pointer_down = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
@@ -334,6 +342,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     canvas_panned.current = false
     e.currentTarget.setPointerCapture(e.pointerId)
     last_pos.current = { x: e.clientX, y: e.clientY }
+    set_canvas_dragging(true)
   }
 
   const on_pointer_move = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -348,6 +357,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   const on_pointer_up = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.currentTarget.releasePointerCapture(e.pointerId)
+    set_canvas_dragging(false)
     if (!canvas_panned.current) set_selected_model(null)
   }
 
@@ -360,8 +370,10 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
       e.stopPropagation()
       card_drag_moved.current = false
       drag_last_screen.current = { x: e.clientX, y: e.clientY }
-      e.currentTarget.setPointerCapture(e.pointerId)
-      e.preventDefault()
+      if (mode_ref.current === "edit") {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        e.preventDefault()
+      }
     }
   }, [])
 
@@ -399,9 +411,9 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   }, [])
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d1117] select-none">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/6 shrink-0 cursor-default select-none">
+    <div className="relative h-screen bg-[#161616] select-none overflow-hidden">
+      {/* Toolbar — absolute so canvas renders behind it, enabling real backdrop-blur */}
+      <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 py-2.5 bg-[#0a0a0a]/70 backdrop-blur-2xl border-b border-white/6 cursor-default select-none">
         <div className="flex items-center gap-2.5">
           <Logo size={18} className={parser_color} />
           <span className="text-white text-sm font-semibold">{parser_label}</span>
@@ -432,6 +444,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
           <button
             onClick={() => {
               set_transform(DEFAULT_VIEW_TRANSFORM)
+              clear_viewport_cookie()
               skip_next_viewport_persist.current = true
             }}
             className="text-[11px] text-gray-600 hover:text-gray-300 transition-colors cursor-pointer"
@@ -447,13 +460,23 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
       </div>
 
       <div className="absolute bottom-4 right-5 text-[10px] text-gray-700 pointer-events-none z-10 text-right leading-relaxed">
-        <span className="text-gray-600">Ctrl</span> + scroll · Drag canvas / drag tables
+        <span className="text-gray-600">Ctrl</span> + scroll to zoom
+      </div>
+
+      {/* Mode switcher — Figma-like floating pill */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center bg-[#0a0a0a] border border-white/8 rounded-xl px-1 py-1 shadow-xl gap-0.5">
+        <ModeBtn active={mode === "select"} onClick={() => set_mode("select")} title="Select  V">
+          <CursorIcon />
+        </ModeBtn>
+        <ModeBtn active={mode === "edit"} onClick={() => set_mode("edit")} title="Edit  E">
+          <MoveIcon />
+        </ModeBtn>
       </div>
 
       {/* Viewport */}
       <div
         ref={wrapper_ref}
-        className="flex-1 overflow-hidden overscroll-contain cursor-grab active:cursor-grabbing"
+        className={clsx("absolute inset-0 overflow-hidden overscroll-contain", canvas_dragging ? "cursor-grabbing" : mode === "edit" ? "cursor-grab" : "cursor-default")}
         onPointerDown={on_pointer_down}
         onPointerMove={on_pointer_move}
         onPointerUp={on_pointer_up}
@@ -531,7 +554,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
                 key={model.name}
                 data-model-card
                 className={clsx(
-                  "absolute rounded-lg overflow-hidden shadow-2xl border touch-none select-none",
+                  "absolute rounded-lg overflow-hidden border touch-none select-none shadow-[0_8px_32px_rgba(0,0,0,0.65)]",
                   is_dragging ? "cursor-grabbing" : "cursor-pointer",
                   is_dimmed ? "border-white/3" : "border-white/[0.07]",
                 )}
@@ -571,7 +594,7 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
                   <div className="text-white/50 text-[10px] font-mono leading-tight">{model.tableName}</div>
                 </div>
 
-                <div className="bg-[#161b22]">
+                <div className="bg-[#0a0a0a]">
                   {model.fields.map((field) => (
                     <div
                       key={field.name}
@@ -622,6 +645,38 @@ function LegendBadge({ label, color }: { label: string; color: string }) {
       <Badge color={color}>{label}</Badge>
       <span>{label === "PK" ? "Primary key" : label === "FK" ? "Foreign key" : "Unique"}</span>
     </div>
+  )
+}
+
+function ModeBtn({ active, onClick, title, children }: { active: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={clsx(
+        "w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer",
+        active ? "bg-white/15 text-white" : "text-gray-500 hover:text-gray-300 hover:bg-white/5",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function CursorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+      <path d="M2.5 1 L2.5 12 L5.4 9.1 L7.2 13 L8.5 12.4 L6.7 8.5 L10 8.5 Z" />
+    </svg>
+  )
+}
+
+function MoveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+      <polygon points="7,1 5,3.5 6.2,3.5 6.2,6.2 3.5,6.2 3.5,5 1,7 3.5,9 3.5,7.8 6.2,7.8 6.2,10.5 5,10.5 7,13 9,10.5 7.8,10.5 7.8,7.8 10.5,7.8 10.5,9 13,7 10.5,5 10.5,6.2 7.8,6.2 7.8,3.5 9,3.5" />
+    </svg>
   )
 }
 

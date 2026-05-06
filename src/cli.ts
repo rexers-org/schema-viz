@@ -172,10 +172,18 @@ const public_dir = path.join(__dirname, "..", "dist", "public")
 const source = create_schema_source(resolved)
 const project_root = resolved.source === "files" ? resolved.project_root : process.cwd()
 const source_key = resolved.source === "files" ? resolved.project_root : resolved.database_url
-start_server(source, port, public_dir, { share_mode, project_root, source_key })
+
+const share_file_path = path.join(project_root, ".schema-viz.json")
+const share_mode_auto = !share_mode && existsSync(share_file_path)
+const effective_share_mode = share_mode || share_mode_auto
+
+start_server(source, port, public_dir, { share_mode: effective_share_mode, project_root, source_key })
 
 console.log(`  URL    : http://localhost:${port}`)
-console.log(`  Layout : ${share_mode ? `${project_root}/.schema-viz.json (--share)` : "~/.schema-viz/ (cache)"}`)
+const layout_label = effective_share_mode
+  ? `${share_file_path} (${share_mode_auto ? "auto-detected" : "--share"})`
+  : "~/.schema-viz/ (cache)"
+console.log(`  Layout : ${layout_label}`)
 if (resolved.source === "files") {
   console.log(`  Files  : ${resolved.discovered_files.length} (initial)`)
   console.log(`  Reload : parses again on refresh (project mode re-scans subtree)`)
