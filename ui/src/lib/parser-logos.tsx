@@ -124,12 +124,42 @@ type ParserInfo = {
   color: string
 }
 
+export function TypeORMLogo({ size = 18, className }: Props) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      {/* Outer ring */}
+      <ellipse cx="12" cy="12" rx="9" ry="9" stroke="currentColor" strokeWidth="1.5" />
+      {/* T letter */}
+      <path
+        d="M8 8.5h8M12 8.5v7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function DrizzleLogo({ size = 18, className }: Props) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      {/* Three stacked tilted lines — Drizzle's drip motif */}
+      <path d="M5 7h14" stroke="#C5F74F" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7 12h10" stroke="#C5F74F" strokeWidth="2" strokeLinecap="round" />
+      <path d="M9 17h6" stroke="#C5F74F" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 const PARSER_MAP: Record<string, ParserInfo> = {
   Prisma: { Logo: PrismaLogo, label: "Prisma", color: "text-gray-300" },
   "Laravel migrations": { Logo: LaravelLogo, label: "Laravel", color: "text-[#FF2D20]/90" },
   JSON: { Logo: JSONLogo, label: "JSON", color: "text-yellow-400/80" },
   "postgresql-db": { Logo: PostgreSQLLogo, label: "PostgreSQL", color: "text-[#5B9BD5]" },
   "mysql-db": { Logo: MySQLLogo, label: "MySQL", color: "text-[#4479A1]" },
+  TypeORM: { Logo: TypeORMLogo, label: "TypeORM", color: "text-[#E83524]/90" },
+  "Drizzle ORM": { Logo: DrizzleLogo, label: "Drizzle", color: "text-[#C5F74F]/90" },
 }
 
 export function parser_info(parserName: string): ParserInfo {

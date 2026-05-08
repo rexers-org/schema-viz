@@ -2,12 +2,13 @@
 
 > Universal database schema visualizer — point it at a schema file or directory and get an interactive ER diagram in your browser, with pan, zoom, and live reload.
 
-**Supported formats:** Prisma · Laravel migrations · JSON · PostgreSQL / MySQL (live URL)
+**Supported formats:** Prisma · Laravel migrations · TypeORM · Drizzle ORM · JSON · PostgreSQL / MySQL (live URL)
 
 ---
 
 ## Release Note
 
+- `0.3.3` — TypeORM and Drizzle ORM parser support. Point schema-viz at a directory with `*.entity.ts` files (TypeORM) or TypeScript files with `drizzle-orm` imports (Drizzle) to get an ER diagram. Use `--parser=typeorm` or `--parser=drizzle` to force the parser.
 - `0.3.2` — layout no longer resets when the schema changes. Tables that still exist keep their saved positions; only newly-added tables are auto-positioned. Previously, any schema change (added/removed table, field count diff, FK change) wiped the entire layout.
 - `0.3.1` — select / edit mode switcher (Figma-style bottom pill, `V` / `E`); auto-detect `.schema-viz.json` for share mode; redesigned dark theme with frosted-glass toolbar.
 - `0.3.0` — table selection: click any table to highlight it and its FK relations; unrelated tables dim out. Framework logos in toolbar (Prisma, Laravel, PostgreSQL, MySQL, JSON). Server-side layout persistence with `--share` flag.
@@ -48,7 +49,7 @@ schema-viz --url '<connection-string>' [options]
 | Option | Default | Description |
 |---|---|---|
 | `--url` | — | `postgresql://` / `postgres://` / `mysql://` connection string (instead of `<path>`) |
-| `--parser=<id>` | auto-detect | Restrict parser for file input: `prisma` / `laravel` / `json` |
+| `--parser=<id>` | auto-detect | Restrict parser for file input: `prisma` / `laravel` / `typeorm` / `drizzle` / `json` |
 | `--port=<n>` | `7337` | Port to run the local server on |
 | `--autoopen` (`--auto-open`) | off | Auto-open the browser after server starts |
 | `--share` | off | Save layout to `.schema-viz.json` in the project root (see [Layout persistence](#layout-persistence)) |

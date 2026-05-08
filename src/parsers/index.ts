@@ -1,9 +1,11 @@
 import type { SchemaData } from "@/types"
+import { drizzleParser } from "./drizzle"
 import { jsonParser } from "./json"
 import { laravelParser } from "./laravel"
 import { prismaParser } from "./prisma"
+import { typeormParser } from "./typeorm"
 
-export type ParserId = "prisma" | "laravel" | "json"
+export type ParserId = "prisma" | "laravel" | "json" | "typeorm" | "drizzle"
 
 export interface Parser {
   id: ParserId
@@ -20,11 +22,14 @@ export interface Parser {
 /*
  * Register parsers here in priority order when no --parser is passed: the first
  * parser that discovers any file under the project wins.
+ * Drizzle is last because its discovery reads all .ts file contents (slower).
  */
-export const PARSERS: Parser[] = [prismaParser, laravelParser, jsonParser]
+export const PARSERS: Parser[] = [prismaParser, laravelParser, typeormParser, jsonParser, drizzleParser]
 
 export const PARSERS_BY_ID: Record<ParserId, Parser> = {
   prisma: prismaParser,
   laravel: laravelParser,
   json: jsonParser,
+  typeorm: typeormParser,
+  drizzle: drizzleParser,
 }
