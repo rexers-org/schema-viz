@@ -8,6 +8,7 @@
 
 ## Release Note
 
+- `0.3.2` — layout no longer resets when the schema changes. Tables that still exist keep their saved positions; only newly-added tables are auto-positioned. Previously, any schema change (added/removed table, field count diff, FK change) wiped the entire layout.
 - `0.3.1` — select / edit mode switcher (Figma-style bottom pill, `V` / `E`); auto-detect `.schema-viz.json` for share mode; redesigned dark theme with frosted-glass toolbar.
 - `0.3.0` — table selection: click any table to highlight it and its FK relations; unrelated tables dim out. Framework logos in toolbar (Prisma, Laravel, PostgreSQL, MySQL, JSON). Server-side layout persistence with `--share` flag.
 - `0.2.1` — documentation update (README and publishing-related docs alignment).

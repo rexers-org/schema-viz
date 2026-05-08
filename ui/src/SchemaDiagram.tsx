@@ -191,8 +191,6 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
 
   const [position_overrides, set_position_overrides] = useState<TablePositionsMap>(() => {
     if (!savedLayout) return {}
-    const current_sig = schema_drag_key(models, relations)
-    if (savedLayout.sigHash !== current_sig) return {}
     const names = new Set(models.map((m) => m.name))
     const out: TablePositionsMap = {}
     for (const [k, v] of Object.entries(savedLayout.positions)) {
