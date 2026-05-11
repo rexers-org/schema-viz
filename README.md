@@ -8,6 +8,8 @@
 
 ## Release Note
 
+- `0.4.1` — Shift + click on any table card toggles it in or out of the current multi-selection, allowing incremental selection without losing already-selected tables. Regular click still replaces the selection with just that table.
+- `0.4.0` — multi-select and rubber-band selection. Hold Shift and drag on the canvas to draw a selection box; all tables inside are highlighted together with a sky-blue glow, related tables stay visible, and unrelated tables dim. Drag any selected table to move the whole group. Shift + click adds individual tables to the selection. Works in both Select and Edit modes (dragging cards is still Edit-only). Interaction mode is now persisted in a cookie across page refreshes.
 - `0.3.3` — TypeORM and Drizzle ORM parser support. Point schema-viz at a directory with `*.entity.ts` files (TypeORM) or TypeScript files with `drizzle-orm` imports (Drizzle) to get an ER diagram. Use `--parser=typeorm` or `--parser=drizzle` to force the parser.
 - `0.3.2` — layout no longer resets when the schema changes. Tables that still exist keep their saved positions; only newly-added tables are auto-positioned. Previously, any schema change (added/removed table, field count diff, FK change) wiped the entire layout.
 - `0.3.1` — select / edit mode switcher (Figma-style bottom pill, `V` / `E`); auto-detect `.schema-viz.json` for share mode; redesigned dark theme with frosted-glass toolbar.
@@ -20,8 +22,8 @@
 ## Features
 
 - **Smart auto-layout** — tables are arranged column-by-column using FK-graph BFS. The most-referenced tables land in the leftmost column; related tables (e.g. `Course` / `Courses` / `CourseDetail`) are grouped in the same horizontal band; infrastructure tables (cache, session, log …) are pushed to the bottom.
-- **Select / Edit modes** — a Figma-style pill at the bottom centre switches between **Select** (`V`) and **Edit** (`E`). In Select mode click any table to highlight it; in Edit mode drag tables to rearrange them. Both modes support selection; only Edit mode allows dragging.
-- **Table selection** — click any table to highlight it. Directly related tables (FK in or out) stay visible; all others dim out. FK lines animate with a directional flow to show the relationship direction. Click the same table or the canvas background to deselect.
+- **Select / Edit modes** — a Figma-style pill at the bottom centre switches between **Select** (`V`) and **Edit** (`E`). In Select mode click any table to highlight it; in Edit mode drag tables to rearrange them. Both modes support selection; only Edit mode allows dragging. The active mode is remembered across page refreshes.
+- **Table selection & multi-select** — click any table to highlight it; related tables (FK in or out) stay visible while all others dim. Shift + click toggles individual tables into the selection. Hold Shift and drag on the canvas to draw a rubber-band box and select multiple tables at once. FK lines animate with a directional flow. Click the canvas background to deselect all.
 - **Drag & persist** — switch to Edit mode and drag tables to rearrange; positions are saved server-side and survive browser restarts. See [Layout persistence](#layout-persistence).
 - **Auto share-mode detection** — if `.schema-viz.json` already exists in the project root, share mode activates automatically without needing `--share`.
 - **Framework logos** — the toolbar shows the detected framework logo (Prisma, Laravel, PostgreSQL, MySQL, JSON) instead of a plain text badge.
@@ -79,10 +81,13 @@ Database mode uses `pg` / `mysql2`, honors TLS-related URL options (e.g. `?sslmo
 | Zoom in / out | `+` / `−` buttons |
 | Reset pan & zoom | Reset view button |
 | Select table | Click table card (any mode) |
-| Deselect | Click canvas background |
+| Add / remove table from selection | Shift + click table card |
+| Multi-select (rubber-band) | Shift + drag on canvas |
+| Deselect all | Click canvas background |
 | Move table | Drag card (Edit mode) |
-| Switch to Select mode | `V` or bottom-left pill |
-| Switch to Edit mode | `E` or bottom-left pill |
+| Move selected group | Drag any selected card (Edit mode) |
+| Switch to Select mode | `V` or bottom pill |
+| Switch to Edit mode | `E` or bottom pill |
 
 ---
 
