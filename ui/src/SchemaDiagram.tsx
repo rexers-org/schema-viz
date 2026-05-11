@@ -8,6 +8,19 @@ import { clear_layout, save_layout, type SavedLayout } from "./lib/api-layout"
 import { parser_info } from "./lib/parser-logos"
 import { schema_drag_key, type TablePositionsMap } from "./lib/table-positions"
 import { clear_viewport_cookie, load_viewport_cookie, save_viewport_cookie } from "./lib/viewport"
+import { read_cookie, write_cookie } from "./lib/cookie"
+
+const MODE_COOKIE = "schema_viz_mode"
+const MODE_COOKIE_AGE = 365 * 24 * 60 * 60
+
+function load_mode_cookie(): InteractionMode {
+  const v = read_cookie(MODE_COOKIE)
+  return v === "edit" || v === "select" ? v : "select"
+}
+
+function save_mode_cookie(mode: InteractionMode): void {
+  write_cookie(MODE_COOKIE, mode, MODE_COOKIE_AGE)
+}
 
 export type ColoredModel = Model & {
   headerColor: string
@@ -255,28 +268,39 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
 
   const drag_last_screen = useRef({ x: 0, y: 0 })
   const [dragging_model, set_dragging_model] = useState<string | null>(null)
-  const [selected_model, set_selected_model] = useState<string | null>(null)
   const card_drag_moved = useRef(false)
   const canvas_panned = useRef(false)
 
-  const [mode, set_mode] = useState<InteractionMode>("select")
+  const [mode, set_mode] = useState<InteractionMode>(() => load_mode_cookie())
   const mode_ref = useRef<InteractionMode>("select")
   mode_ref.current = mode
 
+  useEffect(() => { save_mode_cookie(mode) }, [mode])
+
   const [canvas_dragging, set_canvas_dragging] = useState(false)
+
+  const [multi_selected, set_multi_selected] = useState<Set<string>>(new Set())
+  const multi_selected_ref = useRef<Set<string>>(new Set())
+  multi_selected_ref.current = multi_selected
+
+  const [shift_held, set_shift_held] = useState(false)
+  const shift_held_ref = useRef(false)
+
+  const [selection_box, set_selection_box] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const selection_box_start = useRef<{ x: number; y: number } | null>(null)
 
   const lines = compute_lines(models, relations, layout_positions)
   const { Logo, label: parser_label, color: parser_color } = parser_info(parserName)
 
   const selected_related = useMemo(() => {
-    if (!selected_model) return null
+    if (multi_selected.size === 0) return new Set<string>()
     const s = new Set<string>()
     for (const rel of relations) {
-      if (rel.fromModel === selected_model) s.add(rel.toModel)
-      if (rel.toModel === selected_model) s.add(rel.fromModel)
+      if (multi_selected.has(rel.fromModel)) s.add(rel.toModel)
+      if (multi_selected.has(rel.toModel)) s.add(rel.fromModel)
     }
     return s
-  }, [selected_model, relations])
+  }, [multi_selected, relations])
 
   // Ctrl+scroll → zoom (incl. trackpad pinch). Otherwise pan with deltaX / deltaY
   // (two-finger horizontal swipe uses deltaX; vertical uses deltaY).
@@ -333,11 +357,37 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
     return () => window.removeEventListener("keydown", on_key)
   }, [])
 
+  useEffect(() => {
+    const on_down = (e: KeyboardEvent) => {
+      if (e.key === "Shift") { shift_held_ref.current = true; set_shift_held(true) }
+    }
+    const on_up = (e: KeyboardEvent) => {
+      if (e.key === "Shift") { shift_held_ref.current = false; set_shift_held(false) }
+    }
+    window.addEventListener("keydown", on_down)
+    window.addEventListener("keyup", on_up)
+    return () => { window.removeEventListener("keydown", on_down); window.removeEventListener("keyup", on_up) }
+  }, [])
+
   // Canvas pan — ignore starts on model cards (they handle their own drag)
   const on_pointer_down = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     if ((e.target as HTMLElement).closest("[data-model-card]")) return
     canvas_panned.current = false
+
+    // Shift: start rubber-band selection box (both modes)
+    if (e.shiftKey) {
+      const rect = wrapper_ref.current!.getBoundingClientRect()
+      const z = transform_ref.current.zoom
+      const cx = (e.clientX - rect.left - transform_ref.current.x) / z
+      const cy = (e.clientY - rect.top - transform_ref.current.y) / z
+      selection_box_start.current = { x: cx, y: cy }
+      set_selection_box({ x: cx, y: cy, w: 0, h: 0 })
+      set_multi_selected(new Set())
+      e.currentTarget.setPointerCapture(e.pointerId)
+      return
+    }
+
     e.currentTarget.setPointerCapture(e.pointerId)
     last_pos.current = { x: e.clientX, y: e.clientY }
     set_canvas_dragging(true)
@@ -345,6 +395,19 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
 
   const on_pointer_move = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+
+    // Update rubber-band selection box
+    if (selection_box_start.current !== null) {
+      const rect = wrapper_ref.current!.getBoundingClientRect()
+      const z = transform_ref.current.zoom
+      const cx = (e.clientX - rect.left - transform_ref.current.x) / z
+      const cy = (e.clientY - rect.top - transform_ref.current.y) / z
+      const sx = selection_box_start.current.x
+      const sy = selection_box_start.current.y
+      set_selection_box({ x: Math.min(sx, cx), y: Math.min(sy, cy), w: Math.abs(cx - sx), h: Math.abs(cy - sy) })
+      return
+    }
+
     canvas_panned.current = true
     const dx = e.clientX - last_pos.current.x
     const dy = e.clientY - last_pos.current.y
@@ -355,8 +418,31 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
   const on_pointer_up = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.currentTarget.releasePointerCapture(e.pointerId)
+
+    // Finalise rubber-band selection
+    if (selection_box_start.current !== null) {
+      const rect = wrapper_ref.current!.getBoundingClientRect()
+      const z = transform_ref.current.zoom
+      const cx = (e.clientX - rect.left - transform_ref.current.x) / z
+      const cy = (e.clientY - rect.top - transform_ref.current.y) / z
+      const sx = selection_box_start.current.x
+      const sy = selection_box_start.current.y
+      const bx = Math.min(sx, cx), by = Math.min(sy, cy), bw = Math.abs(cx - sx), bh = Math.abs(cy - sy)
+      const newly_selected = new Set<string>()
+      for (const m of models) {
+        const pos = layout_positions[m.name]
+        if (!pos) continue
+        if (pos.x < bx + bw && pos.x + CARD_W > bx && pos.y < by + bh && pos.y + model_card_height(m) > by)
+          newly_selected.add(m.name)
+      }
+      set_multi_selected(newly_selected)
+      selection_box_start.current = null
+      set_selection_box(null)
+      return
+    }
+
     set_canvas_dragging(false)
-    if (!canvas_panned.current) set_selected_model(null)
+    if (!canvas_panned.current) set_multi_selected(new Set())
   }
 
   const zoom_by = (factor: number) =>
@@ -387,13 +473,16 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
       drag_last_screen.current = { x: e.clientX, y: e.clientY }
 
       const base_positions = positions_ref.current
+      const is_group = multi_selected_ref.current.size > 1 && multi_selected_ref.current.has(model_name)
       set_position_overrides((prev) => {
-        const prev_pt = prev[model_name] ?? base_positions[model_name]
-        if (!prev_pt) return prev
-        return {
-          ...prev,
-          [model_name]: { x: prev_pt.x + dx, y: prev_pt.y + dy },
+        const names_to_move = is_group ? [...multi_selected_ref.current] : [model_name]
+        const next = { ...prev }
+        for (const name of names_to_move) {
+          const pt = prev[name] ?? base_positions[name]
+          if (!pt) continue
+          next[name] = { x: pt.x + dx, y: pt.y + dy }
         }
+        return next
       })
     }
   }, [])
@@ -403,8 +492,12 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
       if (e.currentTarget.hasPointerCapture(e.pointerId))
         e.currentTarget.releasePointerCapture(e.pointerId)
       set_dragging_model(null)
-      if (!card_drag_moved.current)
-        set_selected_model((prev) => (prev === model_name ? null : model_name))
+      if (!card_drag_moved.current) {
+        set_multi_selected((prev) => {
+          if (prev.size === 1 && prev.has(model_name)) return new Set()
+          return new Set([model_name])
+        })
+      }
     }
   }, [])
 
@@ -474,10 +567,15 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
       {/* Viewport */}
       <div
         ref={wrapper_ref}
-        className={clsx("absolute inset-0 overflow-hidden overscroll-contain", canvas_dragging ? "cursor-grabbing" : mode === "edit" ? "cursor-grab" : "cursor-default")}
+        className={clsx("absolute inset-0 overflow-hidden overscroll-contain", selection_box ? "cursor-crosshair" : canvas_dragging ? "cursor-grabbing" : shift_held ? "cursor-crosshair" : mode === "edit" ? "cursor-grab" : "cursor-default")}
         onPointerDown={on_pointer_down}
         onPointerMove={on_pointer_move}
         onPointerUp={on_pointer_up}
+        onPointerCancel={() => {
+          selection_box_start.current = null
+          set_selection_box(null)
+          set_canvas_dragging(false)
+        }}
       >
         <div
           className="cursor-grab"
@@ -513,10 +611,10 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
               ))}
             </defs>
             {lines.map((line) => {
-              const is_from = selected_model === line.from_model
-              const is_to = selected_model === line.to_model
+              const is_from = multi_selected.has(line.from_model)
+              const is_to = multi_selected.has(line.to_model)
               const is_active = is_from || is_to
-              const is_dimmed = selected_model !== null && !is_active
+              const is_dimmed = multi_selected.size > 0 && !is_active
               return (
                 <path
                   key={line.id}
@@ -539,14 +637,23 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
             })}
           </svg>
 
+          {/* Rubber-band selection box */}
+          {selection_box && (
+            <div
+              className="absolute pointer-events-none border border-sky-400/60 bg-sky-400/10 rounded-sm"
+              style={{ left: selection_box.x, top: selection_box.y, width: selection_box.w, height: selection_box.h }}
+            />
+          )}
+
           {/* Model cards */}
           {models.map((model) => {
             const pos = layout_positions[model.name]
             if (!pos) return null
             const is_dragging = dragging_model === model.name
-            const is_selected = selected_model === model.name
-            const is_related = selected_model !== null && selected_related!.has(model.name)
-            const is_dimmed = selected_model !== null && !is_selected && !is_related
+            const is_selected = multi_selected.has(model.name)
+            const is_related = selected_related.has(model.name)
+            const is_dimmed = multi_selected.size > 0 && !is_selected && !is_related
+            const single_select = multi_selected.size === 1
             return (
               <div
                 key={model.name}
@@ -563,10 +670,15 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
                   zIndex: is_dragging ? 100 : is_selected ? 10 : 1,
                   transition: "opacity 0.15s, filter 0.15s",
                   ...(is_dimmed && { opacity: 0.18, filter: "grayscale(1)" }),
-                  ...(is_selected && {
+                  ...(is_selected && single_select && {
                     outline: `2px solid ${model.relationStroke}`,
                     outlineOffset: "-1px",
                     boxShadow: `0 0 24px ${model.relationStroke}50`,
+                  }),
+                  ...(is_selected && !single_select && {
+                    outline: "2px solid rgba(56,189,248,0.5)",
+                    outlineOffset: "-1px",
+                    boxShadow: "0 0 10px rgba(56,189,248,0.35), 0 0 24px rgba(56,189,248,0.15)",
                   }),
                   ...(is_dragging && !is_selected && {
                     outline: "2px solid rgba(255,255,255,0.25)",
