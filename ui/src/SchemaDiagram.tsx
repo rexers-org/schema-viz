@@ -493,10 +493,19 @@ export default function SchemaDiagram({ models, relations, parserName, savedLayo
         e.currentTarget.releasePointerCapture(e.pointerId)
       set_dragging_model(null)
       if (!card_drag_moved.current) {
-        set_multi_selected((prev) => {
-          if (prev.size === 1 && prev.has(model_name)) return new Set()
-          return new Set([model_name])
-        })
+        if (e.shiftKey) {
+          set_multi_selected((prev) => {
+            const next = new Set(prev)
+            if (next.has(model_name)) next.delete(model_name)
+            else next.add(model_name)
+            return next
+          })
+        } else {
+          set_multi_selected((prev) => {
+            if (prev.size === 1 && prev.has(model_name)) return new Set()
+            return new Set([model_name])
+          })
+        }
       }
     }
   }, [])
